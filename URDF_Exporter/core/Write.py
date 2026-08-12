@@ -10,7 +10,8 @@ from xml.etree.ElementTree import Element, SubElement
 from . import Link, Joint
 from ..utils import utils
 
-def write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict):
+def write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict,
+                    collision_meshes=None):
     """
     Write links information into urdf "repo/file_name"
     
@@ -33,13 +34,15 @@ def write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict)
     In this function, links_xyz_dict is set for write_joint_tran_urdf.
     The origin of the coordinate of center_of_mass is the coordinate of the link
     """
+    collision_meshes = collision_meshes or {}
     with open(file_name, mode='a') as f:
         # for base_link
         center_of_mass = inertial_dict['base_link']['center_of_mass']
         link = Link.Link(name='base_link', xyz=[0,0,0], 
             center_of_mass=center_of_mass, repo=repo,
             mass=inertial_dict['base_link']['mass'],
-            inertia_tensor=inertial_dict['base_link']['inertia'])
+            inertia_tensor=inertial_dict['base_link']['inertia'],
+            collision_meshes=collision_meshes.get('base_link'))
         links_xyz_dict[link.name] = link.xyz
         link.make_link_xml()
         f.write(link.link_xml)
@@ -53,7 +56,8 @@ def write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict)
             link = Link.Link(name=name, xyz=joints_dict[joint]['xyz'],\
                 center_of_mass=center_of_mass,\
                 repo=repo, mass=inertial_dict[name]['mass'],\
-                inertia_tensor=inertial_dict[name]['inertia'])
+                inertia_tensor=inertial_dict[name]['inertia'],\
+                collision_meshes=collision_meshes.get(name))
             links_xyz_dict[link.name] = link.xyz            
             link.make_link_xml()
             f.write(link.link_xml)
@@ -118,7 +122,8 @@ def write_gazebo_endtag(file_name):
         f.write('</robot>\n')
         
 
-def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir):
+def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name,
+               save_dir, collision_meshes=None):
     try: os.mkdir(save_dir + '/urdf')
     except: pass 
 
@@ -135,7 +140,8 @@ def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_n
         f.write('<xacro:include filename="$(find {})/urdf/{}.gazebo" />'.format(package_name, robot_name))
         f.write('\n')
 
-    write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict)
+    write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict,
+                    collision_meshes)
     write_joint_urdf(joints_dict, repo, links_xyz_dict, file_name)
     write_gazebo_endtag(file_name)
 

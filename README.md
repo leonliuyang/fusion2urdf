@@ -62,6 +62,24 @@ This exports:
 * .launch and .yaml files to simulate your robot on gazebo
 * .stl files of your model
 
+### Collision meshes
+
+To export simplified collision geometry, create one or more bodies in the same
+Fusion component as a link and name each body with the `collision_` prefix (for
+example, `collision_box`). These bodies are exported as dedicated collision STL
+files, are excluded from mass and inertia calculations, and do not appear in
+the visual mesh. The generated Xacro creates one `<collision>` entry per such
+body. Links with no `collision_` body keep the original behavior of using the
+visual mesh for collision. See [the collision mesh design notes](docs/collision_meshes.md)
+for naming, coordinate, and verification details.
+
+Only the directed joint tree reachable from `base_link` is exported. Loose
+components, such as screws or reference parts that are not connected to this
+tree, are ignored. At the end of an export, Fusion displays each exported
+link's mass and identifies links that fell back to their visual mesh for
+collision. Static child components within an exported link, such as motors or
+gearboxes, are included in that link's visual mesh, mass, and inertia.
+
 ### Sample 
 
 The following test model doesn't stand upright because the z axis is not upright in default fusion 360.
@@ -89,12 +107,15 @@ In addition to that, you should be careful when define your joints. The **parent
 
 <img src="https://github.com/syuntoku14/fusion2urdf/blob/images/spot_mini.PNG" alt="spot_mini" title="spot_mini" width="300" height="300">
 
-Also, make sure components of your model has only bodies. **Nested components are not supported**.
+Each moving URDF link must remain a top-level component in the robot joint tree.
 For example, this works:
 
 <img src="https://github.com/syuntoku14/fusion2urdf/blob/images/only_bodies.PNG" alt="only_bodies" title="only_bodies" width="300" height="300">
 
-but this doesn't work since the "face (3):1" component contains other components. A component must contain only bodies:
+In this collision-mesh version, a link may contain nested **static** components
+such as motors, gearboxes, and fasteners; their bodies are included in the
+parent link's mesh, mass, and inertia. Nested components must not be used as
+separate moving URDF links or joint-tree nodes:
 
 <img src="https://github.com/syuntoku14/fusion2urdf/blob/images/nest_components.PNG" alt="nest_components" title="nest_components" width="300" height="300">
 
@@ -172,7 +193,7 @@ Maybe some error will occur when you run the script. Fix them according to the i
 
 In the above image, base_link is grounded. Right-click it and click "Unground". 
 
-Now you can run the script. Let's run the script. Choose the folder to save and wait for a few seconds. You will see many "old_components" in the components field, please ignore them. 
+Now you can run the script. Choose the folder to save and wait for a few seconds. This collision-mesh version creates temporary export components and removes them automatically, so it does not leave `old_component` copies in the design tree.
 
 <img src="https://github.com/syuntoku14/fusion2urdf/blob/images/result.PNG" alt="results" title="results" width="250" height="300">
 

@@ -229,3 +229,34 @@ def make_joints_dict(root, msg):
         
         joints_dict[joint.name] = joint_dict
     return joints_dict, msg
+
+
+def connected_joints_and_links(joints_dict):
+    """Return only the joint tree reachable from ``base_link``.
+
+    Fusion designs often contain reference hardware or loose components beside
+    the robot. URDF should contain only the directed kinematic tree beginning
+    at ``base_link``; disconnected joint trees are intentionally ignored.
+    """
+    joints_by_parent = {}
+    for joint_name, joint in joints_dict.items():
+        joints_by_parent.setdefault(joint['parent'], []).append((joint_name, joint))
+
+    connected_joint_names = []
+    link_names = ['base_link']
+    pending_links = ['base_link']
+    while pending_links:
+        parent = pending_links.pop(0)
+        for joint_name, joint in joints_by_parent.get(parent, []):
+            child = joint['child']
+            if child in link_names:
+                continue
+            connected_joint_names.append(joint_name)
+            link_names.append(child)
+            pending_links.append(child)
+
+    connected_joints = {
+        joint_name: joints_dict[joint_name]
+        for joint_name in connected_joint_names
+    }
+    return connected_joints, link_names

@@ -36,7 +36,6 @@ def run(context):
             return
 
         root = design.rootComponent  # root component 
-        components = design.allComponents
 
         # set the names        
         robot_name = root.name.split()[0]
@@ -55,14 +54,16 @@ def run(context):
         # --------------------
         # set dictionaries
         
-        # Generate joints_dict. All joints are related to root. 
+        # Generate the Fusion joint list, then keep only the directed tree
+        # reachable from base_link. Loose hardware is not part of the URDF.
         joints_dict, msg = Joint.make_joints_dict(root, msg)
         if msg != success_msg:
             ui.messageBox(msg, title)
-            return 0   
+            return 0
+        joints_dict, link_names = Joint.connected_joints_and_links(joints_dict)
         
         # Generate inertial_dict
-        inertial_dict, msg = Link.make_inertial_dict(root, msg)
+        inertial_dict, msg = Link.make_inertial_dict(root, msg, link_names)
         if msg != success_msg:
             ui.messageBox(msg, title)
             return 0
@@ -74,26 +75,34 @@ def run(context):
         links_xyz_dict = {}
         
         # --------------------
-        # Generate URDF
-        Write.write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
-        Write.write_materials_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
-        Write.write_transmissions_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
-        Write.write_gazebo_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
-        Write.write_display_launch(package_name, robot_name, save_dir)
-        Write.write_gazebo_launch(package_name, robot_name, save_dir)
-        Write.write_control_launch(package_name, robot_name, save_dir, joints_dict)
-        Write.write_yaml(package_name, robot_name, save_dir, joints_dict)
-        
-        # copy over package files
-        utils.copy_package(save_dir, package_dir)
-        utils.update_cmakelists(save_dir, package_name)
-        utils.update_package_xml(save_dir, package_name)
+        # Generate URDF and STL files. Temporary occurrences preserve the
+        # coordinate behavior of the legacy exporter without renaming or
+        # retaining copies of the user's source components.
+        visual_exports = []
+        collision_exports = []
+        try:
+            visual_exports, collision_exports, collision_meshes = \
+                utils.prepare_mesh_exports(root, link_names)
 
-        # Generate STl files        
-        utils.copy_occs(root)
-        utils.export_stl(design, save_dir, components)   
+            Write.write_urdf(joints_dict, links_xyz_dict, inertial_dict,
+                             package_name, robot_name, save_dir, collision_meshes)
+            Write.write_materials_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
+            Write.write_transmissions_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
+            Write.write_gazebo_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
+            Write.write_display_launch(package_name, robot_name, save_dir)
+            Write.write_gazebo_launch(package_name, robot_name, save_dir)
+            Write.write_control_launch(package_name, robot_name, save_dir, joints_dict)
+            Write.write_yaml(package_name, robot_name, save_dir, joints_dict)
+
+            # Copy the catkin package template before placing mesh files in it.
+            utils.copy_package(save_dir, package_dir)
+            utils.update_cmakelists(save_dir, package_name)
+            utils.update_package_xml(save_dir, package_name)
+            utils.export_stl(design, save_dir, visual_exports, collision_exports)
+        finally:
+            utils.cleanup_mesh_exports(visual_exports, collision_exports)
         
-        ui.messageBox(msg, title)
+        ui.messageBox(utils.export_summary(link_names, inertial_dict, collision_meshes), title)
         
     except:
         if ui:

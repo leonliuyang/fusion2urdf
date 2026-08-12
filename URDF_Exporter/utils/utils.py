@@ -13,45 +13,141 @@ import shutil  # Replaced distutils with shutil
 import fileinput
 import sys
 
-def copy_occs(root):    
-    """    
-    duplicate all the components
-    """    
-    def copy_body(allOccs, occs):
-        """    
-        copy the old occs to new component
-        """
-        
-        bodies = occs.bRepBodies
-        transform = adsk.core.Matrix3D.create()
-        
-        # Create new components from occs
-        # This support even when a component has some occses. 
-
-        new_occs = allOccs.addNewComponent(transform)  # this create new occs
-        if occs.component.name == 'base_link':
-            occs.component.name = 'old_component'
-            new_occs.component.name = 'base_link'
-        else:
-            new_occs.component.name = re.sub('[ :()]', '_', occs.name)
-        new_occs = allOccs.item((allOccs.count-1))
-        for i in range(bodies.count):
-            body = bodies.item(i)
-            body.copyToComponent(new_occs)
-    
-    allOccs = root.occurrences
-    oldOccs = []
-    coppy_list = [occs for occs in allOccs]
-    for occs in coppy_list:
-        if occs.bRepBodies.count > 0:
-            copy_body(allOccs, occs)
-            oldOccs.append(occs)
-
-    for occs in oldOccs:
-        occs.component.name = 'old_component'
+COLLISION_PREFIX = 'collision_'
 
 
-def export_stl(design, save_dir, components):  
+def is_collision_body(body):
+    """Return whether a Fusion body is reserved for collision geometry."""
+    return body.name.lower().startswith(COLLISION_PREFIX)
+
+
+def occurrence_link_name(occurrence):
+    """Return the link name used by the generated URDF for an occurrence."""
+    if occurrence.component.name == 'base_link':
+        return 'base_link'
+    return re.sub('[ :()]', '_', occurrence.name)
+
+
+def occurrence_bodies(occurrence):
+    """Return body proxies from an occurrence and all of its descendants.
+
+    A robot link can contain nested static components, such as a motor,
+    gearbox, or fasteners. Their bodies belong to the link's visual geometry
+    and physical properties even though they are not direct bodies of the
+    top-level link occurrence.
+    """
+    bodies = []
+    pending_occurrences = [occurrence]
+    while pending_occurrences:
+        current_occurrence = pending_occurrences.pop()
+        for i in range(current_occurrence.bRepBodies.count):
+            bodies.append(current_occurrence.bRepBodies.item(i))
+        for i in range(current_occurrence.childOccurrences.count):
+            pending_occurrences.append(current_occurrence.childOccurrences.item(i))
+    return bodies
+
+
+def _mesh_stem(link_name, body_name, index):
+    """Create a deterministic, filesystem-safe collision mesh filename stem."""
+    safe_body_name = re.sub('[^A-Za-z0-9_.-]', '_', body_name)
+    return '{}__{}__{}'.format(link_name, safe_body_name, index)
+
+
+def prepare_mesh_exports(root, link_names=None):
+    """Create temporary root occurrences for visual and collision STL export.
+
+    The copies preserve the exporter's existing occurrence-based coordinate
+    behavior, while leaving the source components and their names untouched.
+    The caller must pass the returned occurrences to ``cleanup_mesh_exports``.
+    """
+    visual_exports = []
+    collision_exports = []
+    collision_meshes = {}
+    all_occurrences = root.occurrences
+    link_names = set(link_names) if link_names else None
+
+    # Snapshot the collection because new temporary occurrences are appended to it.
+    source_occurrences = [all_occurrences.item(i) for i in range(all_occurrences.count)]
+    for occurrence in source_occurrences:
+        bodies = occurrence_bodies(occurrence)
+        if not bodies:
+            continue
+
+        link_name = occurrence_link_name(occurrence)
+        if link_names is not None and link_name not in link_names:
+            continue
+        visual_bodies = []
+        collision_bodies = []
+        for body in bodies:
+            if is_collision_body(body):
+                collision_bodies.append(body)
+            else:
+                visual_bodies.append(body)
+
+        if visual_bodies:
+            visual_occurrence = all_occurrences.addNewComponent(adsk.core.Matrix3D.create())
+            visual_occurrence.component.name = link_name
+            for body in visual_bodies:
+                body.copyToComponent(visual_occurrence)
+            visual_exports.append((link_name, visual_occurrence))
+
+        for index, body in enumerate(collision_bodies, start=1):
+            mesh_stem = _mesh_stem(link_name, body.name, index)
+            collision_occurrence = all_occurrences.addNewComponent(adsk.core.Matrix3D.create())
+            collision_occurrence.component.name = mesh_stem
+            body.copyToComponent(collision_occurrence)
+            collision_exports.append((mesh_stem, collision_occurrence))
+            collision_meshes.setdefault(link_name, []).append(
+                'collision/{}.stl'.format(mesh_stem))
+
+    return visual_exports, collision_exports, collision_meshes
+
+
+def export_summary(link_names, inertial_dict, collision_meshes):
+    """Create the final Fusion dialog text for collision and mass verification."""
+    lines = ['Successfully created URDF files.', '', 'Exported link masses:']
+    for link_name in link_names:
+        link_properties = inertial_dict[link_name]
+        lines.append('- {}: {:.6f} kg ({} physical bodies; {} collision bodies excluded)'.format(
+            link_name,
+            link_properties['mass'],
+            link_properties['physical_body_count'],
+            link_properties['collision_body_count']))
+
+    fallback_links = [
+        link_name for link_name in link_names
+        if not collision_meshes.get(link_name)
+    ]
+    lines.extend(['', 'Collision meshes:'])
+    if fallback_links:
+        lines.append('The following links have no collision_ body; their visual mesh is used for collision:')
+        lines.extend('- {}'.format(link_name) for link_name in fallback_links)
+    else:
+        lines.append('All exported links use dedicated collision_ bodies.')
+
+    lines.extend([
+        '',
+        'Bodies whose names start with collision_ are excluded from the masses above and from inertia calculations.'
+    ])
+    return '\n'.join(lines)
+
+
+def cleanup_mesh_exports(visual_exports, collision_exports):
+    """Delete temporary occurrences created by ``prepare_mesh_exports``."""
+    for _, occurrence in visual_exports + collision_exports:
+        if occurrence and occurrence.isValid:
+            occurrence.deleteMe()
+
+
+def _export_occurrence_stl(export_manager, occurrence, file_name):
+    stl_export_options = export_manager.createSTLExportOptions(occurrence, file_name)
+    stl_export_options.sendToPrintUtility = False
+    stl_export_options.isBinaryFormat = True
+    stl_export_options.meshRefinement = adsk.fusion.MeshRefinementSettings.MeshRefinementLow
+    export_manager.execute(stl_export_options)
+
+
+def export_stl(design, save_dir, visual_exports, collision_exports):
     """
     export stl files into "save_dir/"
     
@@ -60,32 +156,31 @@ def export_stl(design, save_dir, components):
     design: adsk.fusion.Design.cast(product)
     save_dir: str
         directory path to save
-    components: design.allComponents
+    visual_exports: list of ``(link_name, occurrence)`` pairs
+    collision_exports: list of ``(mesh_stem, occurrence)`` pairs
     """
           
     # create a single exportManager instance
     exportMgr = design.exportManager
-    # get the script location
-    try: os.mkdir(save_dir + '/meshes')
-    except: pass
-    scriptDir = save_dir + '/meshes'  
-    # export the occurrence one by one in the component to a specified file
-    for component in components:
-        allOccus = component.allOccurrences
-        for occ in allOccus:
-            if 'old_component' not in occ.component.name:
-                try:
-                    print(occ.component.name)
-                    fileName = scriptDir + "/" + occ.component.name              
-                    # create stl exportOptions
-                    stlExportOptions = exportMgr.createSTLExportOptions(occ, fileName)
-                    stlExportOptions.sendToPrintUtility = False
-                    stlExportOptions.isBinaryFormat = True
-                    # options are .MeshRefinementLow .MeshRefinementMedium .MeshRefinementHigh
-                    stlExportOptions.meshRefinement = adsk.fusion.MeshRefinementSettings.MeshRefinementLow
-                    exportMgr.execute(stlExportOptions)
-                except:
-                    print('Component ' + occ.component.name + ' has something wrong.')
+    mesh_dir = save_dir + '/meshes'
+    collision_dir = mesh_dir + '/collision'
+    for directory in [mesh_dir, collision_dir]:
+        try: os.mkdir(directory)
+        except: pass
+
+    for link_name, occurrence in visual_exports:
+        try:
+            print(link_name)
+            _export_occurrence_stl(exportMgr, occurrence, mesh_dir + '/' + link_name)
+        except:
+            print('Component ' + link_name + ' has something wrong.')
+
+    for mesh_stem, occurrence in collision_exports:
+        try:
+            print(mesh_stem)
+            _export_occurrence_stl(exportMgr, occurrence, collision_dir + '/' + mesh_stem)
+        except:
+            print('Collision mesh ' + mesh_stem + ' has something wrong.')
 
 
 def file_dialog(ui):     

@@ -169,11 +169,8 @@ def make_joints_dict(root, msg):
         elif joint_type == 'fixed':
             pass
         
-        if joint.occurrenceTwo.component.name == 'base_link':
-            joint_dict['parent'] = 'base_link'
-        else:
-            joint_dict['parent'] = re.sub('[ :()]', '_', joint.occurrenceTwo.name)
-        joint_dict['child'] = re.sub('[ :()]', '_', joint.occurrenceOne.name)
+        joint_dict['parent'] = utils.occurrence_link_name(joint.occurrenceTwo)
+        joint_dict['child'] = utils.occurrence_link_name(joint.occurrenceOne)
         
         
         #There seem to be a problem with geometryOrOriginTwo. To calcualte the correct orogin of the generated stl files following approach was used.

@@ -12,7 +12,7 @@ from ..utils import utils
 class Link:
 
     def __init__(self, name, xyz, center_of_mass, repo, mass, inertia_tensor,
-                 collision_meshes=None):
+                 collision_meshes=None, is_virtual=False):
         """
         Parameters
         ----------
@@ -41,6 +41,7 @@ class Link:
         self.mass = mass
         self.inertia_tensor = inertia_tensor
         self.collision_meshes = collision_meshes or []
+        self.is_virtual = is_virtual
         
     def make_link_xml(self):
         """
@@ -49,6 +50,9 @@ class Link:
         
         link = Element('link')
         link.attrib = {'name':self.name}
+        if self.is_virtual:
+            self.link_xml = "\n".join(utils.prettify(link).split("\n")[1:])
+            return
         
         #inertial
         inertial = SubElement(link, 'inertial')
@@ -121,9 +125,19 @@ def make_inertial_dict(root, msg, link_names=None):
         occs_dict = {}
         occs_dict['name'] = link_name
 
+        all_bodies = utils.occurrence_bodies(occs)
+        if utils.is_virtual_link_occurrence(occs):
+            if all_bodies:
+                msg = ('Virtual link {} must not contain BRep bodies. Use a sketch and '
+                       'Joint Origin only, or rename the physical component.').format(occs.name)
+                return {}, msg
+            occs_dict['is_virtual'] = True
+            inertial_dict[link_name] = occs_dict
+            continue
+
         physical_bodies = []
         collision_body_count = 0
-        for body in utils.occurrence_bodies(occs):
+        for body in all_bodies:
             if not utils.is_collision_body(body):
                 physical_bodies.append(body)
             else:

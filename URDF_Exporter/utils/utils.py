@@ -14,6 +14,7 @@ import fileinput
 import sys
 
 COLLISION_PREFIX = 'collision_'
+VIRTUAL_LINK_NAMES = ('tool0', 'tcp')
 
 
 def is_collision_body(body):
@@ -25,7 +26,39 @@ def occurrence_link_name(occurrence):
     """Return the link name used by the generated URDF for an occurrence."""
     if occurrence.component.name == 'base_link':
         return 'base_link'
+    component_name = occurrence.component.name.lower()
+    if component_name in VIRTUAL_LINK_NAMES:
+        return component_name
     return re.sub('[ :()]', '_', occurrence.name)
+
+
+def is_virtual_link_occurrence(occurrence):
+    """Return whether an occurrence represents a reserved virtual end frame."""
+    return occurrence.component.name.lower() in VIRTUAL_LINK_NAMES
+
+
+def virtual_link_info(joints_dict, inertial_dict):
+    """Validate explicit Fusion virtual links and return dialog details."""
+    details = []
+    for link_name, properties in inertial_dict.items():
+        if not properties.get('is_virtual'):
+            continue
+        matching_joints = [
+            (joint_name, joint) for joint_name, joint in joints_dict.items()
+            if joint['child'] == link_name
+        ]
+        if len(matching_joints) != 1:
+            return [], 'Virtual link {} must have exactly one parent joint.'.format(link_name)
+        joint_name, joint = matching_joints[0]
+        if joint['type'] != 'fixed':
+            return [], 'Virtual link {} must be connected using a Rigid (fixed) Fusion joint.'.format(
+                link_name)
+        details.append({
+            'name': link_name,
+            'parent': joint['parent'],
+            'joint': joint_name,
+        })
+    return details, None
 
 
 def occurrence_bodies(occurrence):
@@ -103,11 +136,14 @@ def prepare_mesh_exports(root, link_names=None):
     return visual_exports, collision_exports, collision_meshes
 
 
-def export_summary(link_names, inertial_dict, collision_meshes):
+def export_summary(link_names, inertial_dict, collision_meshes,
+                   conversion_status=None, virtual_links=None):
     """Create the final Fusion dialog text for collision and mass verification."""
     lines = ['Successfully created URDF files.', '', 'Exported link masses:']
     for link_name in link_names:
         link_properties = inertial_dict[link_name]
+        if link_properties.get('is_virtual'):
+            continue
         lines.append('- {}: {:.6f} kg ({} physical bodies; {} collision bodies excluded)'.format(
             link_name,
             link_properties['mass'],
@@ -116,7 +152,8 @@ def export_summary(link_names, inertial_dict, collision_meshes):
 
     fallback_links = [
         link_name for link_name in link_names
-        if not collision_meshes.get(link_name)
+        if not inertial_dict[link_name].get('is_virtual')
+        and not collision_meshes.get(link_name)
     ]
     lines.extend(['', 'Collision meshes:'])
     if fallback_links:
@@ -129,6 +166,14 @@ def export_summary(link_names, inertial_dict, collision_meshes):
         '',
         'Bodies whose names start with collision_ are excluded from the masses above and from inertia calculations.'
     ])
+    if virtual_links:
+        lines.extend(['', 'Virtual end frames from Fusion:'])
+        for virtual_link in virtual_links:
+            lines.append(
+                '- {name}: parent={parent}, fixed joint={joint}; no mass, inertia, visual, collision, or STL.'.format(
+                    **virtual_link))
+    if conversion_status:
+        lines.extend(conversion_status)
     return '\n'.join(lines)
 
 

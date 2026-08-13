@@ -5,7 +5,7 @@ import adsk, adsk.core, adsk.fusion, traceback
 import os
 import sys
 from .utils import utils
-from .core import Link, Joint, Write
+from .core import Link, Joint, StandaloneURDF, Write
 
 """
 # length unit is 'cm' and inertial unit is 'kg/cm^2'
@@ -44,7 +44,7 @@ def run(context):
         if save_dir == False:
             ui.messageBox('Fusion2URDF was canceled', title)
             return 0
-        
+
         save_dir = save_dir + '/' + package_name
         try: os.mkdir(save_dir)
         except: pass     
@@ -61,7 +61,7 @@ def run(context):
             ui.messageBox(msg, title)
             return 0
         joints_dict, link_names = Joint.connected_joints_and_links(joints_dict)
-        
+
         # Generate inertial_dict
         inertial_dict, msg = Link.make_inertial_dict(root, msg, link_names)
         if msg != success_msg:
@@ -70,6 +70,12 @@ def run(context):
         elif not 'base_link' in inertial_dict:
             msg = 'There is no base_link. Please set base_link and run again.'
             ui.messageBox(msg, title)
+            return 0
+
+        virtual_links, virtual_link_error = utils.virtual_link_info(
+            joints_dict, inertial_dict)
+        if virtual_link_error:
+            ui.messageBox(virtual_link_error, title)
             return 0
         
         links_xyz_dict = {}
@@ -80,6 +86,7 @@ def run(context):
         # retaining copies of the user's source components.
         visual_exports = []
         collision_exports = []
+        conversion_status = []
         try:
             visual_exports, collision_exports, collision_meshes = \
                 utils.prepare_mesh_exports(root, link_names)
@@ -99,10 +106,14 @@ def run(context):
             utils.update_cmakelists(save_dir, package_name)
             utils.update_package_xml(save_dir, package_name)
             utils.export_stl(design, save_dir, visual_exports, collision_exports)
+            conversion_status = StandaloneURDF.generate_standalone_urdfs(
+                save_dir, package_name, robot_name)
         finally:
             utils.cleanup_mesh_exports(visual_exports, collision_exports)
         
-        ui.messageBox(utils.export_summary(link_names, inertial_dict, collision_meshes), title)
+        ui.messageBox(utils.export_summary(
+            link_names, inertial_dict, collision_meshes, conversion_status,
+            virtual_links), title)
         
     except:
         if ui:

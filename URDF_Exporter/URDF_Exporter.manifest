@@ -3,8 +3,9 @@
 	"type":	"script",
 	"author":	"syuntoku14",
 	"description":	{
-		"":	"Export stl and URDF file"
+		"":	"Export URDF with dedicated collision meshes, Pinocchio, and EAIK output"
 	},
+	"version":	"1.3.0",
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true
 }

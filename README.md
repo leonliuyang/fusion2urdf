@@ -80,6 +80,25 @@ link's mass and identifies links that fell back to their visual mesh for
 collision. Static child components within an exported link, such as motors or
 gearboxes, are included in that link's visual mesh, mass, and inertia.
 
+### Pinocchio 与 EAIK URDF
+
+导出完成后，`urdf/` 还会自动生成两个不依赖 ROS/xacro 的文件：
+
+* `<robot>_pin.urdf`：保留完整机器人树，供 Pinocchio 使用。
+* `<robot>_eaik.urdf`：仅保留自动识别出的六轴串联链，并将关节规范为
+  `joint_1` 至 `joint_6`，供 EAIK 使用。
+
+转换会内联材料、移除 Gazebo/transmission 标签，并将 visual 与 collision 的
+mesh 路径改为相对路径。若模型无法自动识别为唯一六轴串联链，Pinocchio URDF
+仍会生成，Fusion 的结束提示会说明 EAIK 文件未生成的原因。
+
+如需末端坐标系，请在 Fusion 根装配中创建一个名称严格为 `tool0`（或后续的
+`tcp`）的空组件：组件内不能有 BRep body，可保留草图和 Joint Origin；再用
+Rigid Joint 将它接到法兰 link（例如 `L7_1`）。导出器会直接保留该 Fusion Joint
+的位姿，在 Xacro、Pinocchio 和 EAIK URDF 中写出对应的 fixed joint。虚拟 link
+不包含质量、惯量、visual、collision 或 STL；最终提示框会列出其父 link 和关节。
+EAIK 只计数可动关节，因此这些 fixed joint 不会影响六轴链识别。
+
 ### Sample 
 
 The following test model doesn't stand upright because the z axis is not upright in default fusion 360.

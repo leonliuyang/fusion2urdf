@@ -51,13 +51,19 @@ def write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict,
         # others
         for joint in joints_dict:
             name = joints_dict[joint]['child']
-            center_of_mass = \
-                [ i-j for i, j in zip(inertial_dict[name]['center_of_mass'], joints_dict[joint]['xyz'])]
-            link = Link.Link(name=name, xyz=joints_dict[joint]['xyz'],\
-                center_of_mass=center_of_mass,\
-                repo=repo, mass=inertial_dict[name]['mass'],\
-                inertia_tensor=inertial_dict[name]['inertia'],\
-                collision_meshes=collision_meshes.get(name))
+            properties = inertial_dict[name]
+            if properties.get('is_virtual'):
+                link = Link.Link(name=name, xyz=joints_dict[joint]['xyz'],
+                    center_of_mass=[0, 0, 0], repo=repo, mass=0.0,
+                    inertia_tensor=[0, 0, 0, 0, 0, 0], is_virtual=True)
+            else:
+                center_of_mass = \
+                    [ i-j for i, j in zip(properties['center_of_mass'], joints_dict[joint]['xyz'])]
+                link = Link.Link(name=name, xyz=joints_dict[joint]['xyz'],\
+                    center_of_mass=center_of_mass,\
+                    repo=repo, mass=properties['mass'],\
+                    inertia_tensor=properties['inertia'],\
+                    collision_meshes=collision_meshes.get(name))
             links_xyz_dict[link.name] = link.xyz            
             link.make_link_xml()
             f.write(link.link_xml)

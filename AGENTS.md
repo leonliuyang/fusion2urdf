@@ -26,6 +26,15 @@ Copy-Item .\URDF_Exporter "$env:APPDATA\Autodesk\Autodesk Fusion 360\API\Scripts
 
 近期历史使用简短的祈使式主题，例如 `Fix compatibility with Python 3.12`、`Update Joint.py`。每个提交聚焦一项变更；标题说明对象和结果。拉取请求应说明问题、实现和验证的 Fusion/ROS 版本；如导出结果改变，附上生成的 Xacro 差异或 RViz/Gazebo 截图，并关联相关 issue。
 
+## 版本维护
+
+每次修改会影响安装到 Fusion 的插件交付物时，必须在提交前更新
+`URDF_Exporter/URDF_Exporter.manifest` 的 `version`，并在
+`docs/DEVELOPMENT_LOG.md` 记录版本和变更内容；不要等待用户提醒。使用语义化
+版本：修复或内部调整递增补丁号（如 `1.1.0` → `1.1.1`），新增兼容功能递增次
+版本（如 `1.1.0` → `1.2.0`），不兼容变更递增主版本。纯文档修订不需要发布新
+插件版本。
+
 ## Fusion 与安全提示
 
 运行导出器会修改 Fusion 设计，先备份模型。组件应直接包含 bodies，避免嵌套组件；把基础组件命名为 `base_link`，并在提交前避免加入生成的网格或本地 ROS 构建产物，除非它们是有意更新的示例资产。

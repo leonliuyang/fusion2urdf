@@ -180,6 +180,10 @@ def make_inertial_dict(root, msg, link_names=None):
         occs_dict['collision_body_count'] = collision_body_count
         occs_dict['inertia'] = utils.origin2center_of_mass(
             moment_inertia_world, center_of_mass, mass)
+        if not utils.is_positive_definite_inertia(occs_dict['inertia']):
+            msg = ('{} has a non-positive-definite inertia tensor after collision '
+                   'filtering. Check the physical bodies and materials.').format(occs.name)
+            return {}, msg
         
         if link_name == 'base_link':
             inertial_dict['base_link'] = occs_dict

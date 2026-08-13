@@ -9,6 +9,12 @@ import adsk, re
 from xml.etree.ElementTree import Element, SubElement
 from ..utils import utils
 
+# Fusion exposes position limits but not actuator effort/velocity ratings. These
+# documented defaults keep legacy ROS URDF files valid; change them here or in a
+# project-specific post-export configuration when hardware ratings are known.
+DEFAULT_LIMIT_EFFORT = 100.0
+DEFAULT_LIMIT_VELOCITY = 100.0
+
 class Joint:
     def __init__(self, name, xyz, axis, parent, child, joint_type, upper_limit, lower_limit):
         """
@@ -61,7 +67,8 @@ class Joint:
         if self.type == 'revolute' or self.type == 'prismatic':
             limit = SubElement(joint, 'limit')
             limit.attrib = {'upper': str(self.upper_limit), 'lower': str(self.lower_limit),
-                            'effort': '100', 'velocity': '100'}
+                            'effort': str(DEFAULT_LIMIT_EFFORT),
+                            'velocity': str(DEFAULT_LIMIT_VELOCITY)}
             
         self.joint_xml = "\n".join(utils.prettify(joint).split("\n")[1:])
 
@@ -136,8 +143,8 @@ def make_joints_dict(root, msg):
         
         # support  "Revolute", "Rigid" and "Slider"
         if joint_type == 'revolute':
-            joint_dict['axis'] = [round(i, 6) for i in \
-                joint.jointMotion.rotationAxisVector.asArray()] ## In Fusion, exported axis is normalized.
+            joint_dict['axis'] = utils.normalize_axis(
+                joint.jointMotion.rotationAxisVector.asArray(), joint.name)
             max_enabled = joint.jointMotion.rotationLimits.isMaximumValueEnabled
             min_enabled = joint.jointMotion.rotationLimits.isMinimumValueEnabled            
             if max_enabled and min_enabled:  
@@ -153,8 +160,8 @@ def make_joints_dict(root, msg):
                 joint_dict['type'] = 'continuous'
                 
         elif joint_type == 'prismatic':
-            joint_dict['axis'] = [round(i, 6) for i in \
-                joint.jointMotion.slideDirectionVector.asArray()]  # Also normalized
+            joint_dict['axis'] = utils.normalize_axis(
+                joint.jointMotion.slideDirectionVector.asArray(), joint.name)
             max_enabled = joint.jointMotion.slideLimits.isMaximumValueEnabled
             min_enabled = joint.jointMotion.slideLimits.isMinimumValueEnabled            
             if max_enabled and min_enabled:  

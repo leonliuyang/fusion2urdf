@@ -42,3 +42,22 @@
   Pinocchio 与 EAIK URDF 均保留该 joint 的 Fusion 位姿。
 - 虚拟 link 不生成质量、惯量、visual、collision 或 STL；结束对话框会显示其父
   link、fixed joint 及无物理/网格属性状态。EAIK 仍只计数六个可动关节。
+
+## 2026-08-13：v1.4.0 通用下游输出 Profile
+
+- 独立 URDF 的可动关节按从根 link 出发的运动学树稳定编号为 `joint_1`、
+  `joint_2`……；空末端 frame 的固定关节使用语义名称，例如
+  `tool0_fixed_joint`，不再成为易混淆的 `joint_7`。
+- EAIK Profile 仅在末端 fixed frame 变换与最后可动关节旋转可交换时，才将它折叠
+  到最后关节的 origin；实现使用齐次变换组合，并检测轴旋转与垂直偏移。不能等价
+  折叠时明确不生成 EAIK 文件，避免输出错误 TCP。
+- 新增通用 ROS 2 / MoveIt Profile：生成以根组件名自动派生名称的独立 ROS 2 描述包，
+  包含 `base_footprint`、`base_link → tool0` SRDF 规划链、仅含可动关节的
+  ros2_control 模板、控制器/初始位姿配置和 ROS 2 package URI mesh。
+- 新增 `model_manifest.yaml`，记录导出版本、CAD 文档、link/joint/fixed frame 以及
+  输出 URDF 与 mesh 的 SHA256；增加无 Fusion 依赖的稳定命名、EAIK 折叠/拒绝和
+  MoveIt Profile 回归测试。
+- 公共导出层会归一化可动关节轴并拒绝零轴；碰撞过滤后的普通 link 惯量必须通过
+  对称正定性检查。避免继续依赖不说明来源的占位运动参数。
+- 传统 ROS Xacro 所需的 `effort`/`velocity` 改为有来源说明的插件默认值，并在
+  manifest 中标识其不来自 Fusion 的电机/驱动数据。

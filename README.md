@@ -99,6 +99,36 @@ Rigid Joint 将它接到法兰 link（例如 `L7_1`）。导出器会直接保�
 不包含质量、惯量、visual、collision 或 STL；最终提示框会列出其父 link 和关节。
 EAIK 只计数可动关节，因此这些 fixed joint 不会影响六轴链识别。
 
+### 输出 Profile 与验证
+
+从 v1.4.0 起，导出器会基于同一份完整 Xacro 生成多个用途明确的文件：
+
+* `urdf/<robot>_pin.urdf`：完整物理模型，保留所有 link、质量、碰撞网格与 fixed
+  frame，供 Pinocchio 或一般 URDF 使用。
+* `urdf/<robot>_eaik.urdf`：仅在可自动识别唯一六轴串联链时生成的 EAIK 运动学模型。
+  可动关节按运动学树稳定命名为 `joint_1` 至 `joint_6`；`tool0_fixed_joint` 不会被
+  误命名为 `joint_7`。若末端空 frame 的 fixed 变换与末轴旋转可交换，导出器会将该
+  变换折叠进末轴；否则拒绝生成 EAIK 文件，避免输出末端错误的模型。
+* `ros2/<robot>_description/`：独立 ROS 2 描述包，包含 `urdf/<robot>.urdf.xacro`、
+  `config/<robot>.srdf`、ros2_control 控制器与初始位姿模板，以及复制的 mesh。该
+  Profile 使用 `base_footprint`、`base_link → tool0` 规划链和
+  `package://<robot>_description/meshes/...` 路径；包名由 Fusion 根组件名自动转换，
+  不固定为某一个机器人项目的名称。
+
+每次导出还会写出 `model_manifest.yaml`，记录插件/文档信息、link/joint/fixed frame
+列表及 URDF、mesh 的 SHA256。时间戳只存在于 manifest；同一 CAD 状态的模型 XML
+与关节命名保持确定性。可在不启动 Fusion 的环境执行回归测试：
+
+```powershell
+uv run --with pytest pytest tests
+```
+
+导出前会归一化可动关节轴，并拒绝零轴；普通实体 link 的碰撞过滤后惯量必须是对称
+正定矩阵。插件不会臆造 CAD 未提供的力矩、速度或电机参数；ROS 2 控制器模板仅声明
+接口，具体硬件插件和初始位置由 Xacro 参数/配置文件在部署时提供。传统 ROS Xacro
+必须带 `effort`/`velocity` limit 时会使用 `core/Joint.py` 中显式标注的插件默认值，
+并在 manifest 中声明其不是 Fusion 电机参数。
+
 ### Sample 
 
 The following test model doesn't stand upright because the z axis is not upright in default fusion 360.

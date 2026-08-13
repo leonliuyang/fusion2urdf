@@ -6,6 +6,7 @@ Created on Sun May 12 19:15:34 2019
 """
 
 import adsk, adsk.core, adsk.fusion
+import math
 import os.path, re
 from xml.etree import ElementTree
 from xml.dom import minidom
@@ -20,6 +21,29 @@ VIRTUAL_LINK_NAMES = ('tool0', 'tcp')
 def is_collision_body(body):
     """Return whether a Fusion body is reserved for collision geometry."""
     return body.name.lower().startswith(COLLISION_PREFIX)
+
+
+def normalize_axis(axis, context):
+    """Return a unit axis or fail before writing an invalid URDF."""
+    length = math.sqrt(sum(value * value for value in axis))
+    if length <= 1e-12:
+        raise ValueError('{} has a zero-length axis.'.format(context))
+    return [round(value / length, 12) for value in axis]
+
+
+def is_positive_definite_inertia(inertia_tensor):
+    """Check Sylvester's criterion for a symmetric 3×3 inertia tensor."""
+    if len(inertia_tensor) != 6 or not all(math.isfinite(value) for value in inertia_tensor):
+        return False
+    ixx, iyy, izz, ixy, iyz, ixz = inertia_tensor
+    scale = max(abs(ixx), abs(iyy), abs(izz), 1e-16)
+    epsilon = scale * 1e-12
+    leading_minor_2 = ixx * iyy - ixy * ixy
+    determinant = (
+        ixx * (iyy * izz - iyz * iyz)
+        - ixy * (ixy * izz - iyz * ixz)
+        + ixz * (ixy * iyz - iyy * ixz))
+    return ixx > epsilon and leading_minor_2 > epsilon ** 2 and determinant > epsilon ** 3
 
 
 def occurrence_link_name(occurrence):
@@ -262,7 +286,7 @@ def origin2center_of_mass(inertia, center_of_mass, mass):
     z = center_of_mass[2]
     translation_matrix = [y**2 + z**2, x**2 + z**2, x**2 + y**2,
                          -x*y, -y*z, -x*z]
-    return [round(i - mass*t, 6) for i, t in zip(inertia, translation_matrix)]
+    return [i - mass*t for i, t in zip(inertia, translation_matrix)]
 
 
 def prettify(elem):

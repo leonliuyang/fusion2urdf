@@ -7,6 +7,8 @@ import sys
 from .utils import utils
 from .core import Link, Joint, StandaloneURDF, Write
 
+PLUGIN_VERSION = '1.4.0'
+
 """
 # length unit is 'cm' and inertial unit is 'kg/cm^2'
 # If there is no 'body' in the root component, maybe the corrdinates are wrong.
@@ -107,7 +109,7 @@ def run(context):
             utils.update_package_xml(save_dir, package_name)
             utils.export_stl(design, save_dir, visual_exports, collision_exports)
             conversion_status = StandaloneURDF.generate_standalone_urdfs(
-                save_dir, package_name, robot_name)
+                save_dir, package_name, robot_name, PLUGIN_VERSION, root.name)
         finally:
             utils.cleanup_mesh_exports(visual_exports, collision_exports)
         

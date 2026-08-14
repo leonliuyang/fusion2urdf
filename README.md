@@ -109,11 +109,13 @@ EAIK 只计数可动关节，因此这些 fixed joint 不会影响六轴链识�
   可动关节按运动学树稳定命名为 `joint_1` 至 `joint_6`；`tool0_fixed_joint` 不会被
   误命名为 `joint_7`。若末端空 frame 的 fixed 变换与末轴旋转可交换，导出器会将该
   变换折叠进末轴；否则拒绝生成 EAIK 文件，避免输出末端错误的模型。
-* `ros2/<robot>_description/`：独立 ROS 2 描述包，包含 `urdf/<robot>.urdf.xacro`、
-  `config/<robot>.srdf`、ros2_control 控制器与初始位姿模板，以及复制的 mesh。该
-  Profile 使用 `base_footprint`、`base_link → tool0` 规划链和
-  `package://<robot>_description/meshes/...` 路径；包名由 Fusion 根组件名自动转换，
-  不固定为某一个机器人项目的名称。
+* 外层导出包直接作为 ROS 2 描述包：新增 `urdf/<robot>.urdf.xacro`、
+  `config/<robot>.srdf`、ros2_control 控制器与初始位姿模板，复用外层唯一的 `meshes/`
+  目录，不再生成嵌套的 `ros2/` 包或重复复制 STL。该 Profile 使用
+  `base_footprint`、`base_link → tool0` 规划链和
+  `package://<robot>_description/meshes/...` 路径；外层 `package.xml` 与
+  `CMakeLists.txt` 会更新为 ROS 2 `ament_cmake` 描述包元数据，包名由 Fusion 根组件名
+  自动转换，不固定为某一个机器人项目的名称。
 
 每次导出还会写出 `model_manifest.yaml`，记录插件/文档信息、link/joint/fixed frame
 列表及 URDF、mesh 的 SHA256。时间戳只存在于 manifest；同一 CAD 状态的模型 XML

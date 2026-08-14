@@ -7,7 +7,7 @@ import sys
 from .utils import utils
 from .core import Link, Joint, StandaloneURDF, Write
 
-PLUGIN_VERSION = '1.4.0'
+PLUGIN_VERSION = '1.4.1'
 
 """
 # length unit is 'cm' and inertial unit is 'kg/cm^2'

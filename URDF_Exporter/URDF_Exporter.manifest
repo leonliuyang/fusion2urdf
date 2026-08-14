@@ -5,7 +5,7 @@
 	"description":	{
 		"":	"Export URDF with dedicated collision meshes, Pinocchio, and EAIK output"
 	},
-	"version":	"1.4.0",
+	"version":	"1.4.1",
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true
 }

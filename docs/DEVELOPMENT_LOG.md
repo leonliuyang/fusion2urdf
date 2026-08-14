@@ -61,3 +61,12 @@
   对称正定性检查。避免继续依赖不说明来源的占位运动参数。
 - 传统 ROS Xacro 所需的 `effort`/`velocity` 改为有来源说明的插件默认值，并在
   manifest 中标识其不来自 Fusion 的电机/驱动数据。
+
+## 2026-08-14：v1.4.1 扁平化 ROS 2 输出
+
+- 取消 `ros2/<robot>_description/` 嵌套描述包及重复复制的 mesh；MoveIt Xacro、SRDF、
+  控制器与初始位姿配置直接写入外层导出包的 `urdf/`、`config/` 目录，并复用唯一的
+  `meshes/`。
+- 外层 `package.xml`、`CMakeLists.txt` 由 ROS 2 Profile 直接写为 `ament_cmake`
+  描述包元数据。重新导出时，仅自动清理由旧版导出器生成且可识别的嵌套 ROS 2 包，
+  不触碰其他用户目录。

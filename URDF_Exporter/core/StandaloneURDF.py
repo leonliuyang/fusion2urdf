@@ -599,21 +599,20 @@ ament_package()
     return [package_xml, cmake_lists]
 
 
-def _copy_meshes_to_ros2_package(source_directory, target_directory):
-    if not os.path.isdir(source_directory):
-        return []
-    copied_files = []
-    for directory, _, file_names in os.walk(source_directory):
-        relative_directory = os.path.relpath(directory, source_directory)
-        target_subdirectory = os.path.join(target_directory, relative_directory)
-        if not os.path.isdir(target_subdirectory):
-            os.makedirs(target_subdirectory)
-        for file_name in file_names:
-            source_file = os.path.join(directory, file_name)
-            target_file = os.path.join(target_subdirectory, file_name)
-            shutil.copy2(source_file, target_file)
-            copied_files.append(target_file)
-    return copied_files
+def _remove_legacy_nested_ros2_profile(package_dir, ros_package_name):
+    """Remove only the old, exporter-generated nested ROS 2 package."""
+    legacy_directory = os.path.join(package_dir, 'ros2', ros_package_name)
+    metadata_file = os.path.join(legacy_directory, 'package.xml')
+    if not os.path.isfile(metadata_file):
+        return
+    with open(metadata_file, 'r', encoding='utf-8', errors='replace') as file_handle:
+        metadata = file_handle.read()
+    if '<description>Generated ROS 2 robot description package.</description>' not in metadata:
+        return
+    shutil.rmtree(legacy_directory)
+    legacy_parent = os.path.dirname(legacy_directory)
+    if os.path.isdir(legacy_parent) and not os.listdir(legacy_parent):
+        os.rmdir(legacy_parent)
 
 
 def _write_moveit_profile(package_dir, robot_name, pin_robot):
@@ -628,11 +627,10 @@ def _write_moveit_profile(package_dir, robot_name, pin_robot):
 
     mechanical_tip = _infer_six_axis_tip(profile_robot)
     chain_tip = _virtual_tip_after(profile_robot, mechanical_tip)
-    ros2_package_directory = os.path.join(
-        package_dir, 'ros2', ros_package_name)
-    urdf_directory = os.path.join(ros2_package_directory, 'urdf')
-    config_directory = os.path.join(ros2_package_directory, 'config')
-    mesh_directory = os.path.join(ros2_package_directory, 'meshes')
+    _remove_legacy_nested_ros2_profile(package_dir, ros_package_name)
+    urdf_directory = os.path.join(package_dir, 'urdf')
+    config_directory = os.path.join(package_dir, 'config')
+    mesh_directory = os.path.join(package_dir, 'meshes')
     for directory in [urdf_directory, config_directory, mesh_directory]:
         if not os.path.isdir(directory):
             os.makedirs(directory)
@@ -655,11 +653,9 @@ def _write_moveit_profile(package_dir, robot_name, pin_robot):
     _write_ros2_controller_config(controller_file, movable_joints)
     _write_initial_positions(initial_positions_file, movable_joints)
     metadata_files = _write_ros2_package_metadata(
-        ros2_package_directory, ros_package_name)
-    mesh_files = _copy_meshes_to_ros2_package(
-        os.path.join(package_dir, 'meshes'), mesh_directory)
+        package_dir, ros_package_name)
     return ([moveit_file, srdf_file, controller_file, initial_positions_file] +
-            metadata_files + mesh_files), chain_tip
+            metadata_files), chain_tip
 
 
 def generate_standalone_urdfs(package_dir, package_name, robot_name,

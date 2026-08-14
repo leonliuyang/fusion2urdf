@@ -93,6 +93,23 @@ def test_moveit_profile_contains_base_footprint_tool0_and_six_controlled_joints(
     chain = srdf.find('./group/chain')
     assert chain.get('base_link') == 'base_link'
     assert chain.get('tip_link') == 'tool0'
+    assert Path(files[0]).parent == tmp_path / 'urdf'
+    assert not (tmp_path / 'ros2').exists()
+
+
+def test_moveit_profile_removes_only_the_legacy_generated_nested_package(tmp_path):
+    legacy = tmp_path / 'ros2' / 'sample_arm_description'
+    legacy.mkdir(parents=True)
+    (legacy / 'package.xml').write_text(
+        '<description>Generated ROS 2 robot description package.</description>',
+        encoding='utf-8')
+    custom_directory = tmp_path / 'ros2' / 'custom_profile'
+    custom_directory.mkdir()
+
+    STANDALONE._remove_legacy_nested_ros2_profile(str(tmp_path), 'sample_arm_description')
+
+    assert not legacy.exists()
+    assert custom_directory.exists()
 
 
 def test_complete_profiles_keep_pinocchio_tool0_and_fold_eaik_tool0(tmp_path):

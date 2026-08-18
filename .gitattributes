@@ -1,0 +1,10 @@
+# 导出器源码与文本模板固定使用 LF，避免不同系统的 Git 设置改写换行符。
+*.md text eol=lf
+*.py text eol=lf
+*.manifest text eol=lf
+URDF_Exporter/package/** text eol=lf
+Example/Basic_Robot_description/** text eol=lf
+
+# 网格文件为二进制资产，禁止 Git 进行文本换行转换。
+*.stl -text
+*.dae -text

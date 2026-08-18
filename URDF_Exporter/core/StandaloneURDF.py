@@ -23,8 +23,16 @@ def _read_xml(file_name):
 def _write_xml(robot, file_name):
     if hasattr(ElementTree, 'indent'):
         ElementTree.indent(robot, space='  ')
-    ElementTree.ElementTree(robot).write(
-        file_name, encoding='utf-8', xml_declaration=True)
+    xml_content = ElementTree.tostring(
+        robot, encoding='unicode', xml_declaration=True)
+    _write_utf8_lf(file_name, xml_content)
+
+
+def _write_utf8_lf(file_name, content):
+    """以 UTF-8 和固定 LF 写出文本，且仅保留一个文件末尾换行。"""
+    normalized = content.replace('\r\n', '\n').replace('\r', '\n').rstrip('\n') + '\n'
+    with open(file_name, 'w', encoding='utf-8', newline='\n') as file_handle:
+        file_handle.write(normalized)
 
 
 def _strip_xacro_includes(robot):
@@ -456,8 +464,7 @@ def _write_model_manifest(package_dir, pin_robot, output_files, plugin_version,
             lines.append('  - path: {}'.format(_yaml_value(
                 os.path.relpath(file_name, package_dir).replace('\\', '/'))))
             lines.append('    sha256: {}'.format(_yaml_value(_sha256(file_name))))
-    with open(manifest_file, 'w', encoding='utf-8', newline='\n') as file_handle:
-        file_handle.write('\n'.join(lines) + '\n')
+    _write_utf8_lf(manifest_file, '\n'.join(lines))
     return manifest_file
 
 
@@ -557,22 +564,19 @@ def _write_ros2_controller_config(file_name, movable_joints):
         '      - position',
         '      - velocity',
     ])
-    with open(file_name, 'w', encoding='utf-8', newline='\n') as file_handle:
-        file_handle.write('\n'.join(lines) + '\n')
+    _write_utf8_lf(file_name, '\n'.join(lines))
 
 
 def _write_initial_positions(file_name, movable_joints):
     lines = ['initial_positions:']
     lines.extend('  {}: 0.0'.format(joint.get('name')) for joint in movable_joints)
-    with open(file_name, 'w', encoding='utf-8', newline='\n') as file_handle:
-        file_handle.write('\n'.join(lines) + '\n')
+    _write_utf8_lf(file_name, '\n'.join(lines))
 
 
 def _write_ros2_package_metadata(package_directory, ros_package_name):
     package_xml = os.path.join(package_directory, 'package.xml')
     cmake_lists = os.path.join(package_directory, 'CMakeLists.txt')
-    with open(package_xml, 'w', encoding='utf-8', newline='\n') as file_handle:
-        file_handle.write('''<?xml version="1.0"?>
+    _write_utf8_lf(package_xml, '''<?xml version="1.0"?>
 <package format="3">
   <name>{}</name>
   <version>0.1.0</version>
@@ -586,16 +590,13 @@ def _write_ros2_package_metadata(package_directory, ros_package_name):
   <exec_depend>joint_state_broadcaster</exec_depend>
   <exec_depend>joint_trajectory_controller</exec_depend>
   <export><build_type>ament_cmake</build_type></export>
-</package>
-'''.format(ros_package_name))
-    with open(cmake_lists, 'w', encoding='utf-8', newline='\n') as file_handle:
-        file_handle.write('''cmake_minimum_required(VERSION 3.8)
+</package>'''.format(ros_package_name))
+    _write_utf8_lf(cmake_lists, '''cmake_minimum_required(VERSION 3.8)
 project({})
 
 find_package(ament_cmake REQUIRED)
 install(DIRECTORY config meshes urdf DESTINATION share/${{PROJECT_NAME}})
-ament_package()
-'''.format(ros_package_name))
+ament_package()'''.format(ros_package_name))
     return [package_xml, cmake_lists]
 
 

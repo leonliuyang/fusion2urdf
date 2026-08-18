@@ -3,15 +3,93 @@
 Run without Fusion with: ``uv run --with pytest pytest tests``.
 """
 
+import importlib
 import importlib.util
+import sys
+import types
 from pathlib import Path
 from xml.etree import ElementTree
 
 
-MODULE_FILE = Path(__file__).parents[1] / 'URDF_Exporter' / 'core' / 'StandaloneURDF.py'
+REPOSITORY_ROOT = Path(__file__).parents[1]
+MODULE_FILE = REPOSITORY_ROOT / 'URDF_Exporter' / 'core' / 'StandaloneURDF.py'
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
 SPEC = importlib.util.spec_from_file_location('standalone_urdf', MODULE_FILE)
 STANDALONE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(STANDALONE)
+
+
+def _load_legacy_exporter(monkeypatch):
+    """加载传统写出模块，并提供不需要 Fusion 会话的最小 adsk 桩。"""
+    adsk_module = types.ModuleType('adsk')
+    adsk_core_module = types.ModuleType('adsk.core')
+    adsk_fusion_module = types.ModuleType('adsk.fusion')
+    adsk_module.core = adsk_core_module
+    adsk_module.fusion = adsk_fusion_module
+    monkeypatch.setitem(sys.modules, 'adsk', adsk_module)
+    monkeypatch.setitem(sys.modules, 'adsk.core', adsk_core_module)
+    monkeypatch.setitem(sys.modules, 'adsk.fusion', adsk_fusion_module)
+    return (
+        importlib.import_module('URDF_Exporter.core.Write'),
+        importlib.import_module('URDF_Exporter.utils.utils'),
+    )
+
+
+def test_exported_text_files_use_utf8_lf_and_leave_mesh_bytes_unchanged(tmp_path, monkeypatch):
+    """最小导出样例覆盖 XML、Xacro、URDF、YAML、RViz 与二进制网格。"""
+    writer, utils = _load_legacy_exporter(monkeypatch)
+    package_template = tmp_path / 'template'
+    (package_template / 'launch').mkdir(parents=True)
+    (package_template / 'meshes').mkdir()
+    (package_template / 'CMakeLists.txt').write_bytes(b'project(fusion2urdf)\r\n')
+    (package_template / 'LICENSE').write_bytes(b'license\r\n')
+    (package_template / 'package.xml').write_bytes(b'<package>\r\n</package>\r\n')
+    (package_template / 'launch' / 'urdf.rviz').write_bytes(b'Panels:\r\n')
+    stl_bytes = b'\x00STL\r\n\xff\n'
+    dae_bytes = b'\x00DAE\r\n\xfe\n'
+    (package_template / 'meshes' / 'sample.stl').write_bytes(stl_bytes)
+    (package_template / 'meshes' / 'sample.dae').write_bytes(dae_bytes)
+
+    export_directory = tmp_path / 'sample_description'
+    export_directory.mkdir()
+    joints = {}
+    inertial = {
+        'base_link': {
+            'center_of_mass': [0, 0, 0],
+            'mass': 1.0,
+            'inertia': [1, 1, 1, 0, 0, 0],
+        }
+    }
+    writer.write_urdf(joints, {}, inertial, 'sample_description', 'sample', str(export_directory))
+    writer.write_materials_xacro(joints, {}, inertial, 'sample_description', 'sample', str(export_directory))
+    writer.write_transmissions_xacro(joints, {}, inertial, 'sample_description', 'sample', str(export_directory))
+    writer.write_gazebo_xacro(joints, {}, inertial, 'sample_description', 'sample', str(export_directory))
+    writer.write_display_launch('sample_description', 'sample', str(export_directory))
+    writer.write_gazebo_launch('sample_description', 'sample', str(export_directory))
+    writer.write_control_launch('sample_description', 'sample', str(export_directory), joints)
+    writer.write_yaml('sample_description', 'sample', str(export_directory), joints)
+    STANDALONE._write_xml(ElementTree.Element('robot'), export_directory / 'urdf' / 'sample.urdf')
+    utils.copy_package(str(export_directory), str(package_template))
+    utils.update_cmakelists(str(export_directory), 'sample_description')
+    utils.update_package_xml(str(export_directory), 'sample_description')
+
+    expected_text_files = [
+        export_directory / 'package.xml',
+        export_directory / 'urdf' / 'sample.xacro',
+        export_directory / 'urdf' / 'sample.urdf',
+        export_directory / 'launch' / 'controller.yaml',
+        export_directory / 'launch' / 'urdf.rviz',
+    ]
+    assert not utils.validate_exported_text_files(str(export_directory))
+    for file_name in expected_text_files:
+        content = file_name.read_bytes()
+        assert b'\r' not in content
+        assert content.endswith(b'\n')
+        assert not content.endswith(b'\n\n')
+        content.decode('utf-8')
+    assert (export_directory / 'meshes' / 'sample.stl').read_bytes() == stl_bytes
+    assert (export_directory / 'meshes' / 'sample.dae').read_bytes() == dae_bytes
 
 
 def _robot_with_tool0(offset='0.02 0 0'):
@@ -134,7 +212,7 @@ def test_complete_profiles_keep_pinocchio_tool0_and_fold_eaik_tool0(tmp_path):
     ElementTree.SubElement(tool_joint, 'parent', {'link': 'L7_1'})
     ElementTree.SubElement(tool_joint, 'child', {'link': 'tool0'})
     ElementTree.SubElement(tool_joint, 'origin', {'xyz': '0.02 0 0', 'rpy': '0 0 0'})
-    ElementTree.ElementTree(robot).write(urdf_directory / 'Sample Arm.xacro', encoding='utf-8')
+    STANDALONE._write_xml(robot, urdf_directory / 'Sample Arm.xacro')
 
     result = STANDALONE.generate_standalone_urdfs(
         str(package_directory), 'sample_arm_description', 'Sample Arm', '1.4.0', 'Sample Arm')

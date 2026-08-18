@@ -110,6 +110,8 @@ def run(context):
             utils.export_stl(design, save_dir, visual_exports, collision_exports)
             conversion_status = StandaloneURDF.generate_standalone_urdfs(
                 save_dir, package_name, robot_name, PLUGIN_VERSION, root.name)
+            # 最后统一校正所有导出文本；二进制网格不在处理范围内。
+            utils.normalize_exported_text_files(save_dir)
         finally:
             utils.cleanup_mesh_exports(visual_exports, collision_exports)
         

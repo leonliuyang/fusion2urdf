@@ -11,11 +11,66 @@ import os.path, re
 from xml.etree import ElementTree
 from xml.dom import minidom
 import shutil  # Replaced distutils with shutil
-import fileinput
-import sys
 
 COLLISION_PREFIX = 'collision_'
 VIRTUAL_LINK_NAMES = ('tool0', 'tcp')
+TEXT_EXPORT_EXTENSIONS = frozenset({
+    '.cfg', '.cmake', '.gazebo', '.ini', '.json', '.launch', '.rviz', '.srdf',
+    '.trans', '.txt', '.urdf', '.xacro', '.xml', '.yaml', '.yml',
+})
+TEXT_EXPORT_FILENAMES = frozenset({'CMakeLists.txt', 'LICENSE'})
+
+
+def is_export_text_file(file_name):
+    """判断导出目录中的文件是否属于插件生成的文本文件。"""
+    return (os.path.basename(file_name) in TEXT_EXPORT_FILENAMES or
+            os.path.splitext(file_name)[1].lower() in TEXT_EXPORT_EXTENSIONS)
+
+
+def open_export_text(file_name, mode='w'):
+    """以固定的 UTF-8 与 LF 规则打开导出文本，绝不依赖系统默认值。"""
+    return open(file_name, mode=mode, encoding='utf-8', newline='\n')
+
+
+def write_export_text(file_name, content):
+    """写入 UTF-8/LF 文本，并确保文件结尾恰好保留一个 LF。"""
+    normalized = content.replace('\r\n', '\n').replace('\r', '\n').rstrip('\n') + '\n'
+    with open_export_text(file_name) as file_handle:
+        file_handle.write(normalized)
+
+
+def normalize_exported_text_files(directory):
+    """规范化复制模板后的文本；STL、DAE 等非文本文件完全不读取或改写。"""
+    for root, _, file_names in os.walk(directory):
+        for file_name in file_names:
+            path = os.path.join(root, file_name)
+            if not is_export_text_file(path):
+                continue
+            with open(path, 'r', encoding='utf-8', newline=None) as file_handle:
+                content = file_handle.read()
+            write_export_text(path, content)
+
+
+def validate_exported_text_files(directory):
+    """返回导出文本的编码、换行符及末尾换行校验错误列表。"""
+    errors = []
+    for root, _, file_names in os.walk(directory):
+        for file_name in file_names:
+            path = os.path.join(root, file_name)
+            if not is_export_text_file(path):
+                continue
+            with open(path, 'rb') as file_handle:
+                content = file_handle.read()
+            try:
+                content.decode('utf-8')
+            except UnicodeDecodeError:
+                errors.append('{} 不是 UTF-8 文本。'.format(path))
+                continue
+            if b'\r' in content:
+                errors.append('{} 包含 CRLF 或孤立 CR。'.format(path))
+            if not content.endswith(b'\n') or content.endswith(b'\n\n'):
+                errors.append('{} 文件末尾不是恰好一个 LF。'.format(path))
+    return errors
 
 
 def is_collision_body(body):
@@ -317,6 +372,7 @@ def copy_package(save_dir, package_dir):
         # Check if the package directory exists and copy it
         if os.path.exists(package_dir):
             shutil.copytree(package_dir, save_dir, dirs_exist_ok=True)  # dirs_exist_ok=True allows overwriting
+            normalize_exported_text_files(save_dir)
         else:
             print(f"Package directory '{package_dir}' does not exist.")
         
@@ -326,21 +382,24 @@ def copy_package(save_dir, package_dir):
 
 def update_cmakelists(save_dir, package_name):
     file_name = save_dir + '/CMakeLists.txt'
-
-    for line in fileinput.input(file_name, inplace=True):
-        if 'project(fusion2urdf)' in line:
-            sys.stdout.write("project(" + package_name + ")\n")
-        else:
-            sys.stdout.write(line)
+    with open(file_name, 'r', encoding='utf-8', newline=None) as file_handle:
+        lines = file_handle.readlines()
+    lines = [
+        "project(" + package_name + ")\n"
+        if 'project(fusion2urdf)' in line else line
+        for line in lines
+    ]
+    write_export_text(file_name, ''.join(lines))
 
 
 def update_package_xml(save_dir, package_name):
     file_name = save_dir + '/package.xml'
-
-    for line in fileinput.input(file_name, inplace=True):
-        if '<name>' in line:
-            sys.stdout.write("  <name>" + package_name + "</name>\n")
-        elif '<description>' in line:
-            sys.stdout.write("<description>The " + package_name + " package</description>\n")
-        else:
-            sys.stdout.write(line)
+    with open(file_name, 'r', encoding='utf-8', newline=None) as file_handle:
+        lines = file_handle.readlines()
+    lines = [
+        "  <name>" + package_name + "</name>\n" if '<name>' in line else
+        "<description>The " + package_name + " package</description>\n"
+        if '<description>' in line else line
+        for line in lines
+    ]
+    write_export_text(file_name, ''.join(lines))

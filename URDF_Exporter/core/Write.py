@@ -35,7 +35,7 @@ def write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict,
     The origin of the coordinate of center_of_mass is the coordinate of the link
     """
     collision_meshes = collision_meshes or {}
-    with open(file_name, mode='a') as f:
+    with utils.open_export_text(file_name, mode='a') as f:
         # for base_link
         center_of_mass = inertial_dict['base_link']['center_of_mass']
         link = Link.Link(name='base_link', xyz=[0,0,0], 
@@ -87,7 +87,7 @@ def write_joint_urdf(joints_dict, repo, links_xyz_dict, file_name):
         urdf full path
     """
     
-    with open(file_name, mode='a') as f:
+    with utils.open_export_text(file_name, mode='a') as f:
         for j in joints_dict:
             parent = joints_dict[j]['parent']
             child = joints_dict[j]['child']
@@ -124,7 +124,7 @@ def write_gazebo_endtag(file_name):
     file_name: str
         urdf full path
     """
-    with open(file_name, mode='a') as f:
+    with utils.open_export_text(file_name, mode='a') as f:
         f.write('</robot>\n')
         
 
@@ -135,7 +135,7 @@ def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_n
 
     file_name = save_dir + '/urdf/' + robot_name + '.xacro'  # the name of urdf file
     repo = package_name + '/meshes/'  # the repository of binary stl files
-    with open(file_name, mode='w') as f:
+    with utils.open_export_text(file_name, mode='w') as f:
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro">\n'.format(robot_name))
         f.write('\n')
@@ -156,7 +156,7 @@ def write_materials_xacro(joints_dict, links_xyz_dict, inertial_dict, package_na
     except: pass  
 
     file_name = save_dir + '/urdf/materials.xacro'  # the name of urdf file
-    with open(file_name, mode='w') as f:
+    with utils.open_export_text(file_name, mode='w') as f:
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro" >\n'.format(robot_name))
         f.write('\n')
@@ -184,7 +184,7 @@ def write_transmissions_xacro(joints_dict, links_xyz_dict, inertial_dict, packag
     """
     
     file_name = save_dir + '/urdf/{}.trans'.format(robot_name)  # the name of urdf file
-    with open(file_name, mode='w') as f:
+    with utils.open_export_text(file_name, mode='w') as f:
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro" >\n'.format(robot_name))
         f.write('\n')
@@ -224,7 +224,7 @@ def write_gazebo_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name,
     file_name = save_dir + '/urdf/' + robot_name + '.gazebo'  # the name of urdf file
     repo = robot_name + '/meshes/'  # the repository of binary stl files
     #repo = package_name + '/' + robot_name + '/bin_stl/'  # the repository of binary stl files
-    with open(file_name, mode='w') as f:
+    with utils.open_export_text(file_name, mode='w') as f:
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro" >\n'.format(robot_name))
         f.write('\n')
@@ -304,8 +304,7 @@ def write_display_launch(package_name, robot_name, save_dir):
     launch_xml = "\n".join(utils.prettify(launch).split("\n")[1:])        
 
     file_name = save_dir + '/launch/display.launch'    
-    with open(file_name, mode='w') as f:
-        f.write(launch_xml)
+    utils.write_export_text(file_name, launch_xml)
 
 def write_gazebo_launch(package_name, robot_name, save_dir):
     """
@@ -350,8 +349,7 @@ def write_gazebo_launch(package_name, robot_name, save_dir):
     launch_xml = "\n".join(utils.prettify(launch).split("\n")[1:])        
     
     file_name = save_dir + '/launch/' + 'gazebo.launch'    
-    with open(file_name, mode='w') as f:
-        f.write(launch_xml)
+    utils.write_export_text(file_name, launch_xml)
 
 
 def write_control_launch(package_name, robot_name, save_dir, joints_dict):
@@ -403,7 +401,7 @@ def write_control_launch(package_name, robot_name, save_dir, joints_dict):
     launch_xml += "\n".join(utils.prettify(node_publisher).split("\n")[1:])   
 
     file_name = save_dir + '/launch/controller.launch'    
-    with open(file_name, mode='w') as f:
+    with utils.open_export_text(file_name, mode='w') as f:
         f.write('<launch>\n')
         f.write('\n')
         #for some reason ROS is very picky about the attribute ordering, so we'll bitbang this element
@@ -411,7 +409,7 @@ def write_control_launch(package_name, robot_name, save_dir, joints_dict):
         f.write('\n')
         f.write(launch_xml)
         f.write('\n')
-        f.write('</launch>')
+        f.write('</launch>\n')
         
 
 def write_yaml(package_name, robot_name, save_dir, joints_dict):
@@ -433,7 +431,7 @@ def write_yaml(package_name, robot_name, save_dir, joints_dict):
 
     controller_name = robot_name + '_controller'
     file_name = save_dir + '/launch/controller.yaml'
-    with open(file_name, 'w') as f:
+    with utils.open_export_text(file_name, mode='w') as f:
         f.write(controller_name + ':\n')
         # joint_state_controller
         f.write('  # Publish all joint states -----------------------------------\n')
